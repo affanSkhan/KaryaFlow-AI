@@ -1,0 +1,14 @@
+services:
+  karyaflow:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - karyaflow_data:/app/uploads
+      - karyaflow_db:/app
+
+volumes:
+  karyaflow_data:
+  karyaflow_db:
