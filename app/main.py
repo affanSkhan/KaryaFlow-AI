@@ -13,6 +13,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .ai import router as ai_router
+
 try:
     from pypdf import PdfReader
 except Exception:  # pragma: no cover
@@ -25,12 +27,9 @@ STATIC_DIR = BASE_DIR / "static"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="KaryaFlow AI", version="1.0.0", description="Evidence-first procurement operations copilot")
+app.include_router(ai_router)
 
-TYPE_LABELS = {
-    "purchase_order": "Purchase Order",
-    "invoice": "Invoice",
-    "delivery_challan": "Delivery Challan",
-}
+TYPE_LABELS = {"purchase_order": "Purchase Order", "invoice": "Invoice", "delivery_challan": "Delivery Challan"}
 
 
 def now() -> str:
@@ -91,18 +90,8 @@ def init_db() -> None:
 
 
 def insert_audit(conn: sqlite3.Connection, case_id: str, event: str, detail: str = "") -> None:
-    conn.execute(
-        "INSERT INTO audits(case_id,event,detail,created_at) VALUES (?,?,?,?)",
-        (case_id, event, detail, now()),
-    )
+    conn.execute("INSERT INTO audits(case_id,event,detail,created_at) VALUES (?,?,?,?)", (case_id, event, detail, now()))
     conn.execute("UPDATE cases SET updated_at=? WHERE id=?", (now(), case_id))
-
-
-def audit(case_id: str, event: str, detail: str = "") -> None:
-    conn = db()
-    insert_audit(conn, case_id, event, detail)
-    conn.commit()
-    conn.close()
 
 
 def normalize_money(v: Any) -> float | None:
@@ -174,20 +163,7 @@ def extract_structured(doc_type: str, text: str, filename: str) -> dict[str, Any
     date = value_after(text, ["Date", "Invoice Date", "PO Date", "Delivery Date"]) or ""
     total = normalize_money(value_after(text, ["Total", "Grand Total", "Invoice Total"]))
     item = parse_line_item("\n".join(lines(text)))
-    return {
-        "document_type": doc_type,
-        "document_label": TYPE_LABELS[doc_type],
-        "filename": filename,
-        "vendor": vendor,
-        "po_number": po_number,
-        "invoice_number": invoice_number,
-        "date": date,
-        "items": [item],
-        "quantity": item["quantity"],
-        "unit_price": item["unit_price"],
-        "total": total,
-        "raw_text": text[:12000],
-    }
+    return {"document_type": doc_type, "document_label": TYPE_LABELS[doc_type], "filename": filename, "vendor": vendor, "po_number": po_number, "invoice_number": invoice_number, "date": date, "items": [item], "quantity": item["quantity"], "unit_price": item["unit_price"], "total": total, "raw_text": text[:12000]}
 
 
 def evidence(document: dict[str, Any], field: str, value: Any) -> dict[str, Any]:
@@ -195,62 +171,24 @@ def evidence(document: dict[str, Any], field: str, value: Any) -> dict[str, Any]
     needle = str(value)
     idx = raw.lower().find(needle.lower()) if needle else -1
     snippet = raw[max(0, idx - 90): idx + len(needle) + 120] if idx >= 0 else raw[:220]
-    return {
-        "document": document.get("filename"),
-        "field": field,
-        "value": value,
-        "page": 1,
-        "snippet": snippet.strip(),
-        "confidence": 0.97 if idx >= 0 else 0.74,
-    }
+    return {"document": document.get("filename"), "field": field, "value": value, "page": 1, "snippet": snippet.strip(), "confidence": 0.97 if idx >= 0 else 0.74}
 
 
 def reconcile(docs: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    po = docs.get("purchase_order")
-    inv = docs.get("invoice")
-    challan = docs.get("delivery_challan")
+    po, inv, challan = docs.get("purchase_order"), docs.get("invoice"), docs.get("delivery_challan")
     if not po or not inv or not challan:
-        return {
-            "status": "INCOMPLETE",
-            "checks": [],
-            "summary": "Upload all three documents before analysis.",
-            "score": 0,
-        }
-
+        return {"status": "INCOMPLETE", "checks": [], "summary": "Upload all three documents before analysis.", "score": 0}
     checks: list[dict[str, Any]] = []
     vendor_match = po["vendor"].strip().lower() == inv["vendor"].strip().lower() == challan["vendor"].strip().lower()
-    checks.append({
-        "key": "vendor", "label": "Vendor", "expected": po["vendor"], "actual": inv["vendor"],
-        "status": "MATCH" if vendor_match else "MISMATCH",
-        "evidence": [evidence(po, "vendor", po["vendor"]), evidence(inv, "vendor", inv["vendor"]), evidence(challan, "vendor", challan["vendor"])],
-    })
-
-    po_ref = po.get("po_number") or ""
-    inv_ref = inv.get("po_number") or ""
+    checks.append({"key": "vendor", "label": "Vendor", "expected": po["vendor"], "actual": inv["vendor"], "status": "MATCH" if vendor_match else "MISMATCH", "evidence": [evidence(po,"vendor",po["vendor"]), evidence(inv,"vendor",inv["vendor"]), evidence(challan,"vendor",challan["vendor"])]})
+    po_ref, inv_ref = po.get("po_number") or "", inv.get("po_number") or ""
     ref_match = bool(po_ref and inv_ref and po_ref.lower() == inv_ref.lower())
-    checks.append({
-        "key": "po_reference", "label": "PO reference", "expected": po_ref or "—", "actual": inv_ref or "—",
-        "status": "MATCH" if ref_match else "MISMATCH",
-        "evidence": [evidence(po, "po_number", po_ref or "PO"), evidence(inv, "po_number", inv_ref or "PO")],
-    })
-
+    checks.append({"key": "po_reference", "label": "PO reference", "expected": po_ref or "—", "actual": inv_ref or "—", "status": "MATCH" if ref_match else "MISMATCH", "evidence": [evidence(po,"po_number",po_ref or "PO"), evidence(inv,"po_number",inv_ref or "PO")]})
     ordered, invoiced, delivered = po["quantity"], inv["quantity"], challan["quantity"]
-    checks.append({
-        "key": "quantity", "label": "Quantity", "expected": ordered,
-        "actual": {"invoice": invoiced, "delivery": delivered},
-        "status": "MATCH" if ordered == invoiced == delivered else "MISMATCH",
-        "variance": {"invoice": invoiced - ordered, "delivery": delivered - ordered},
-        "evidence": [evidence(po, "quantity", ordered), evidence(inv, "quantity", invoiced), evidence(challan, "quantity", delivered)],
-    })
-
+    checks.append({"key": "quantity", "label": "Quantity", "expected": ordered, "actual": {"invoice": invoiced, "delivery": delivered}, "status": "MATCH" if ordered == invoiced == delivered else "MISMATCH", "variance": {"invoice": invoiced - ordered, "delivery": delivered - ordered}, "evidence": [evidence(po,"quantity",ordered), evidence(inv,"quantity",invoiced), evidence(challan,"quantity",delivered)]})
     po_price, inv_price = float(po["unit_price"]), float(inv["unit_price"])
     price_delta = round(inv_price - po_price, 2)
-    checks.append({
-        "key": "unit_price", "label": "Unit price", "expected": po_price, "actual": inv_price,
-        "status": "MATCH" if abs(price_delta) < 0.01 else "MISMATCH", "variance": price_delta,
-        "evidence": [evidence(po, "unit_price", po_price), evidence(inv, "unit_price", inv_price)],
-    })
-
+    checks.append({"key": "unit_price", "label": "Unit price", "expected": po_price, "actual": inv_price, "status": "MATCH" if abs(price_delta) < 0.01 else "MISMATCH", "variance": price_delta, "evidence": [evidence(po,"unit_price",po_price), evidence(inv,"unit_price",inv_price)]})
     mismatches = sum(c["status"] == "MISMATCH" for c in checks)
     status = "MATCH" if mismatches == 0 else "EXCEPTION"
     if status == "MATCH":
@@ -259,12 +197,7 @@ def reconcile(docs: dict[str, dict[str, Any]]) -> dict[str, Any]:
         summary = f"Quantity exception: ordered {ordered}, invoiced {invoiced}, delivered {delivered}."
     else:
         summary = f"{mismatches} reconciliation exception(s) require review before approval."
-    return {
-        "status": status,
-        "checks": checks,
-        "summary": summary,
-        "score": round((len(checks) - mismatches) / len(checks) * 100),
-    }
+    return {"status": status, "checks": checks, "summary": summary, "score": round((len(checks) - mismatches) / len(checks) * 100)}
 
 
 def recommended_action(result: dict[str, Any]) -> tuple[str, str]:
@@ -272,10 +205,7 @@ def recommended_action(result: dict[str, Any]) -> tuple[str, str]:
         return "approve", "All critical fields reconcile. The transaction is ready for approval."
     quantity = next((c for c in result["checks"] if c["key"] == "quantity"), None)
     if quantity and quantity["status"] == "MISMATCH":
-        return (
-            "ask_vendor",
-            f"Please clarify the quantity variance on the invoice. The PO authorizes {quantity['expected']} units, while the invoice shows {quantity['actual']['invoice']} units.",
-        )
+        return "ask_vendor", f"Please clarify the quantity variance on the invoice. The PO authorizes {quantity['expected']} units, while the invoice shows {quantity['actual']['invoice']} units."
     return "escalate", "A procurement exception was detected and requires manual review before the transaction can proceed."
 
 
@@ -305,8 +235,7 @@ def create_case(payload: CaseCreate) -> dict[str, Any]:
     conn = db()
     conn.execute("INSERT INTO cases(id,name,status,created_at,updated_at) VALUES (?,?,?,?,?)", (case_id, payload.name, "draft", ts, ts))
     insert_audit(conn, case_id, "case_created", payload.name)
-    conn.commit()
-    conn.close()
+    conn.commit(); conn.close()
     return {"id": case_id, "name": payload.name, "status": "draft"}
 
 
@@ -314,8 +243,7 @@ def create_case(payload: CaseCreate) -> dict[str, Any]:
 def upload_documents(case_id: str, files: list[UploadFile] = File(...)) -> dict[str, Any]:
     conn = db()
     if not conn.execute("SELECT 1 FROM cases WHERE id=?", (case_id,)).fetchone():
-        conn.close()
-        raise HTTPException(404, "Case not found")
+        conn.close(); raise HTTPException(404, "Case not found")
     out = []
     try:
         for upload in files:
@@ -334,17 +262,13 @@ def upload_documents(case_id: str, files: list[UploadFile] = File(...)) -> dict[
                 structured = extract_structured(doc_type, text, filename)
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
-            conn.execute(
-                "INSERT INTO documents(id,case_id,filename,document_type,path,extracted_json,created_at) VALUES (?,?,?,?,?,?,?)",
-                (doc_id, case_id, filename, doc_type, str(path), json.dumps(structured), now()),
-            )
+            conn.execute("INSERT INTO documents(id,case_id,filename,document_type,path,extracted_json,created_at) VALUES (?,?,?,?,?,?,?)", (doc_id, case_id, filename, doc_type, str(path), json.dumps(structured), now()))
             insert_audit(conn, case_id, "document_uploaded", f"{filename} → {TYPE_LABELS[doc_type]}")
             out.append({"id": doc_id, "filename": filename, "document_type": doc_type, "label": TYPE_LABELS[doc_type]})
         conn.execute("UPDATE cases SET status='documents_ready',updated_at=? WHERE id=?", (now(), case_id))
         conn.commit()
     except Exception:
-        conn.rollback()
-        raise
+        conn.rollback(); raise
     finally:
         conn.close()
     return {"documents": out}
@@ -352,81 +276,51 @@ def upload_documents(case_id: str, files: list[UploadFile] = File(...)) -> dict[
 
 @app.post("/api/cases/{case_id}/analyze")
 def analyze(case_id: str) -> dict[str, Any]:
-    conn = db()
-    rows = conn.execute("SELECT * FROM documents WHERE case_id=?", (case_id,)).fetchall()
+    conn = db(); rows = conn.execute("SELECT * FROM documents WHERE case_id=?", (case_id,)).fetchall()
     if not rows:
-        conn.close()
-        raise HTTPException(400, "Upload procurement documents first")
+        conn.close(); raise HTTPException(400, "Upload procurement documents first")
     docs = {row["document_type"]: json.loads(row["extracted_json"]) for row in rows}
-    result = reconcile(docs)
-    action, message = recommended_action(result)
+    result = reconcile(docs); action, message = recommended_action(result)
     conn.execute("UPDATE cases SET status=?,updated_at=? WHERE id=?", (result["status"].lower(), now(), case_id))
     insert_audit(conn, case_id, "analysis_completed", result["summary"])
-    conn.commit()
-    conn.close()
-    return {
-        "case_id": case_id,
-        "reconciliation": result,
-        "recommendation": {"action": action, "message": message},
-        "documents": docs,
-    }
+    conn.commit(); conn.close()
+    return {"case_id": case_id, "reconciliation": result, "recommendation": {"action": action, "message": message}, "documents": docs}
 
 
 @app.get("/api/cases/{case_id}")
 def get_case(case_id: str) -> dict[str, Any]:
-    conn = db()
-    case = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
+    conn = db(); case = conn.execute("SELECT * FROM cases WHERE id=?", (case_id,)).fetchone()
     if not case:
-        conn.close()
-        raise HTTPException(404, "Case not found")
+        conn.close(); raise HTTPException(404, "Case not found")
     docs = conn.execute("SELECT id,filename,document_type,extracted_json,created_at FROM documents WHERE case_id=? ORDER BY created_at", (case_id,)).fetchall()
     acts = conn.execute("SELECT * FROM actions WHERE case_id=? ORDER BY created_at DESC", (case_id,)).fetchall()
-    audits = conn.execute("SELECT * FROM audits WHERE case_id=? ORDER BY created_at DESC", (case_id,)).fetchall()
-    conn.close()
-    return {
-        "case": dict(case),
-        "documents": [{**dict(x), "extracted": json.loads(x["extracted_json"])} for x in docs],
-        "actions": [dict(x) for x in acts],
-        "audit": [dict(x) for x in audits],
-    }
+    audits = conn.execute("SELECT * FROM audits WHERE case_id=? ORDER BY created_at DESC", (case_id,)).fetchall(); conn.close()
+    return {"case": dict(case), "documents": [{**dict(x), "extracted": json.loads(x["extracted_json"])} for x in docs], "actions": [dict(x) for x in acts], "audit": [dict(x) for x in audits]}
 
 
 @app.post("/api/cases/{case_id}/actions")
 def create_action(case_id: str, payload: ActionCreate) -> dict[str, Any]:
-    action_id = str(uuid.uuid4())
-    conn = db()
+    action_id = str(uuid.uuid4()); conn = db()
     if not conn.execute("SELECT 1 FROM cases WHERE id=?", (case_id,)).fetchone():
-        conn.close()
-        raise HTTPException(404, "Case not found")
-    conn.execute(
-        "INSERT INTO actions(id,case_id,action_type,message,status,created_at) VALUES (?,?,?,?,?,?)",
-        (action_id, case_id, payload.action_type, payload.message, "pending", now()),
-    )
-    insert_audit(conn, case_id, "action_created", payload.action_type)
-    conn.commit()
-    conn.close()
+        conn.close(); raise HTTPException(404, "Case not found")
+    conn.execute("INSERT INTO actions(id,case_id,action_type,message,status,created_at) VALUES (?,?,?,?,?,?)", (action_id, case_id, payload.action_type, payload.message, "pending", now()))
+    insert_audit(conn, case_id, "action_created", payload.action_type); conn.commit(); conn.close()
     return {"id": action_id, "status": "pending"}
 
 
 @app.post("/api/cases/{case_id}/actions/{action_id}/approve")
 def approve_action(case_id: str, action_id: str) -> dict[str, Any]:
-    conn = db()
-    row = conn.execute("SELECT * FROM actions WHERE id=? AND case_id=?", (action_id, case_id)).fetchone()
+    conn = db(); row = conn.execute("SELECT * FROM actions WHERE id=? AND case_id=?", (action_id, case_id)).fetchone()
     if not row:
-        conn.close()
-        raise HTTPException(404, "Action not found")
+        conn.close(); raise HTTPException(404, "Action not found")
     conn.execute("UPDATE actions SET status='approved',approved_at=? WHERE id=?", (now(), action_id))
-    insert_audit(conn, case_id, "human_approved_action", row["action_type"])
-    conn.commit()
-    conn.close()
+    insert_audit(conn, case_id, "human_approved_action", row["action_type"]); conn.commit(); conn.close()
     return {"id": action_id, "status": "approved"}
 
 
 @app.get("/api/cases/{case_id}/audit")
 def get_audit(case_id: str) -> dict[str, Any]:
-    conn = db()
-    rows = conn.execute("SELECT * FROM audits WHERE case_id=? ORDER BY created_at DESC", (case_id,)).fetchall()
-    conn.close()
+    conn = db(); rows = conn.execute("SELECT * FROM audits WHERE case_id=? ORDER BY created_at DESC", (case_id,)).fetchall(); conn.close()
     return {"audit": [dict(x) for x in rows]}
 
 
