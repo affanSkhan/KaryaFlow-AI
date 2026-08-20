@@ -13,8 +13,9 @@ KaryaFlow AI is an evidence-first procurement operations copilot for small and m
 - Approve / Ask Vendor / Escalate actions
 - Human approval gate
 - Audit timeline
-- Optional Gemini-powered action drafting
-- Demo-ready sample documents
+- Grounded Gemini vendor-draft endpoint with deterministic fallback
+- Demo-ready transaction data
+- Docker + Render deployment configuration
 
 ## Run locally
 
@@ -28,15 +29,18 @@ uvicorn app.main:app --reload --port 8000
 
 Open http://localhost:8000.
 
-For AI-assisted extraction/action drafting, set `GEMINI_API_KEY`. Without it, the deterministic demo pipeline still runs end-to-end using the included sample documents.
+For the optional grounded Gemini draft endpoint, set `GEMINI_API_KEY`. Without it, the main procurement workflow remains fully functional.
 
 ## API
 - `GET /api/health`
+- `GET /api/ai/status`
+- `POST /api/ai/draft`
 - `POST /api/cases`
 - `POST /api/cases/{case_id}/documents`
 - `POST /api/cases/{case_id}/analyze`
 - `GET /api/cases/{case_id}`
 - `POST /api/cases/{case_id}/actions`
+- `POST /api/cases/{case_id}/actions/{action_id}/approve`
 - `GET /api/cases/{case_id}/audit`
 
 ## Architecture
@@ -47,23 +51,29 @@ Browser UI
 FastAPI
    |
    +-- Document Store / SQLite
-   +-- Parser + Extractor
+   +-- Parser + Structured Extractor
    +-- Reconciliation Engine (deterministic)
    +-- Evidence Engine
-   +-- Action Generator (Gemini optional)
+   +-- Grounded Gemini Draft Service (optional)
+   +-- Human Approval Gate
    +-- Audit Log
 ```
 
-Critical financial comparisons are calculated in deterministic Python. The model is used for extraction, explanation, and drafting rather than for inventing reconciliation results.
+Critical financial comparisons are calculated in deterministic Python. Gemini is isolated to drafting/explanation work and receives verified facts rather than authority to change reconciliation results.
 
 ## Demo flow
-1. Create a case or use the seeded demo case.
-2. Upload PO, Invoice, and Delivery Challan.
-3. Click **Analyze**.
-4. Review the match summary and highlighted exception.
-5. Open evidence for the mismatched field.
-6. Choose **Ask Vendor** or **Escalate**.
-7. Approve the action and inspect the audit timeline.
+1. Click **Launch demo**.
+2. KaryaFlow generates a realistic PO, invoice, and delivery-challan transaction in-browser.
+3. Verify the vendor, PO reference, quantity, and price checks.
+4. Inspect the quantity exception: PO = 100, invoice = 120, delivery = 100.
+5. Open **Evidence** to show the source snippet behind the mismatched field.
+6. Review **Ask Vendor** recommendation.
+7. Approve the generated action through the human approval gate.
+8. Open **Audit trail** to show the complete decision history.
+
+## Deployment
+
+A `render.yaml` blueprint is included for a single-service deployment. The Dockerfile and `docker-compose.yml` support local/container deployment.
 
 ## License
 MIT
