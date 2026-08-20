@@ -1,0 +1,9 @@
+TAX INVOICE
+Invoice Number: INV-8831
+Reference PO: PO-1042
+Vendor: ABC Manufacturing
+Date: 2026-08-21
+Item: Steel Bolt M10
+Quantity: 120
+Unit Price: 45
+Total: 5400
