@@ -1,0 +1,9 @@
+DELIVERY CHALLAN
+Challan No: DC-3304
+Reference PO: PO-1042
+Vendor: ABC Manufacturing
+Delivery Date: 2026-08-21
+Item: Steel Bolt M10
+Quantity: 100
+Unit Price: 45
+Total: 4500
