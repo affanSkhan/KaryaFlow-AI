@@ -1,0 +1,8 @@
+PURCHASE ORDER
+PO Number: PO-1042
+Vendor: ABC Manufacturing
+Date: 2026-08-20
+Item: Steel Bolt M10
+Quantity: 100
+Unit Price: 45
+Total: 4500
