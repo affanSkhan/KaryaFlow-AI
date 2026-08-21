@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#07121f" />
-  <title>KaryaFlow AI — Procurement Operations</title>
+  <meta name="theme-color" content="#f5f7fa" />
+  <title>KaryaFlow — Procurement Verification</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -13,18 +13,22 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><div class="brand-mark">K</div><div><div class="brand-name">KaryaFlow</div><div class="brand-sub">AI Operations</div></div></div>
+      <div class="brand"><div class="brand-mark">K</div><div><div class="brand-name">KaryaFlow</div><div class="brand-sub">Procurement Operations</div></div></div>
       <nav>
-        <button class="nav-item active" data-tab="overview"><span>⌂</span> Overview</button>
-        <button class="nav-item" data-tab="documents"><span>◫</span> Documents</button>
-        <button class="nav-item" data-tab="audit"><span>◌</span> Audit trail</button>
+        <button class="nav-item active" data-tab="overview"><span>⌂</span>Overview</button>
+        <button class="nav-item" data-tab="documents"><span>▤</span>Documents</button>
+        <button class="nav-item" data-tab="audit"><span>◷</span>Audit trail</button>
       </nav>
-      <div class="sidebar-bottom"><div class="secure-pill">● Secure workspace</div><div class="tiny">Evidence-first AI · Human approval required</div></div>
+      <div class="sidebar-bottom"><div class="secure-pill">● Secure workspace</div><div class="tiny">Evidence-backed decisions · Human approval required</div></div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div><div class="eyebrow">PROCUREMENT OPERATIONS</div><h1>Verification workspace</h1></div>
+        <div>
+          <div class="eyebrow">PROCUREMENT OPERATIONS</div>
+          <h1>Verification workspace</h1>
+          <p>Validate supplier transactions before they move downstream.</p>
+        </div>
         <div class="top-actions"><button class="ghost" id="newCase">New case</button><button class="primary" id="demoCase">Launch demo</button></div>
       </header>
 
@@ -34,41 +38,53 @@
       </section>
 
       <section id="overview" class="tab-panel active">
-        <div class="grid-top">
-          <div class="card workflow-card">
-            <div class="card-head"><div><div class="card-kicker">WORKFLOW</div><h2>Documents → decision</h2></div><span class="badge" id="workflowBadge">READY</span></div>
-            <div class="dropzone" id="dropzone">
-              <input id="fileInput" type="file" accept=".pdf,.txt" multiple hidden />
-              <div class="drop-icon">↑</div><div class="drop-title">Drop PO, invoice & challan here</div><div class="drop-text">PDF or TXT · up to 10 MB each</div><button class="secondary" id="browse">Choose documents</button>
-            </div>
-            <div class="doc-row" id="docRow"></div>
-          </div>
+        <div class="summary-grid">
+          <div class="summary-card"><span>Documents</span><strong id="summaryDocs">0 / 3</strong><small>PO · invoice · challan</small></div>
+          <div class="summary-card"><span>Checks</span><strong id="summaryChecks">—</strong><small>Critical reconciliation fields</small></div>
+          <div class="summary-card"><span>Confidence</span><strong id="summaryConfidence">—</strong><small>Verification score</small></div>
+          <div class="summary-card"><span>Action</span><strong id="summaryAction">Waiting</strong><small>Human decision required</small></div>
+        </div>
 
+        <div class="card workflow-card">
+          <div class="card-head"><div><div class="card-kicker">VERIFICATION WORKFLOW</div><h2>From source documents to approved action</h2></div><span class="badge" id="workflowBadge">READY</span></div>
+          <div class="stepper" id="stepper">
+            <div class="step active" data-step="1"><span class="step-dot">1</span><span>Documents</span></div>
+            <div class="step" data-step="2"><span class="step-dot">2</span><span>Verify</span></div>
+            <div class="step" data-step="3"><span class="step-dot">3</span><span>Review</span></div>
+            <div class="step" data-step="4"><span class="step-dot">4</span><span>Approve</span></div>
+          </div>
+          <div class="dropzone" id="dropzone">
+            <input id="fileInput" type="file" accept=".pdf,.txt" multiple hidden />
+            <div class="drop-icon">↑</div>
+            <div class="drop-title">Upload the PO, invoice and delivery challan</div>
+            <div class="drop-text">PDF or TXT · up to 10 MB per file</div>
+            <button class="secondary" id="browse">Choose documents</button>
+          </div>
+          <div class="doc-row" id="docRow"></div>
+          <div class="run-row"><span class="run-hint" id="runHint">Upload all three documents to start verification.</span><button class="primary" id="runAnalysis" disabled>Run verification</button></div>
+        </div>
+
+        <div class="grid-top lower-grid">
           <div class="card verdict-card">
-            <div class="card-kicker">LIVE VERDICT</div>
-            <div class="verdict-main"><div id="verdictIcon" class="verdict-icon neutral">—</div><div><div id="verdictLabel" class="verdict-label">Awaiting analysis</div><div id="verdictSummary" class="verdict-summary">Upload the three transaction documents and run verification.</div></div></div>
-            <div class="score-line"><span>Reconciliation confidence</span><strong id="score">—</strong></div><div class="bar"><div id="scoreBar"></div></div>
-            <div class="recommendation"><div class="recommendation-kicker">RECOMMENDED NEXT ACTION</div><div class="action-row"><div><div id="recTitle" class="rec-title">—</div><div id="recText" class="rec-text">—</div></div><button class="primary small" id="takeAction">Review</button></div></div>
+            <div class="card-head"><div><div class="card-kicker">VERIFICATION RESULT</div><h2 id="verdictLabel">Awaiting analysis</h2></div><div id="verdictIcon" class="verdict-icon neutral">—</div></div>
+            <div id="verdictSummary" class="verdict-summary large">Upload the three transaction documents and run verification.</div>
+            <div class="score-line"><span>Reconciliation confidence</span><strong id="score">—</strong></div>
+            <div class="bar"><div id="scoreBar"></div></div>
+            <div class="recommendation"><div class="recommendation-kicker">RECOMMENDED NEXT ACTION</div><div class="action-row"><div><div id="recTitle" class="rec-title">Waiting for verification</div><div id="recText" class="rec-text">No action recommendation is available yet.</div></div><button class="primary small" id="takeAction" disabled>Review</button></div></div>
           </div>
-        </div>
-
-        <div class="card checks-card">
-          <div class="card-head"><div><div class="card-kicker">THREE-WAY MATCH</div><h2>Critical fields</h2></div><span id="matchCount" class="muted">0 checks</span></div>
-          <div id="checks" class="checks"></div>
+          <div class="card checks-card compact-checks"><div class="card-head"><div><div class="card-kicker">THREE-WAY MATCH</div><h2>Critical fields</h2></div><span id="matchCount" class="muted">0 checks</span></div><div id="checks" class="checks"></div></div>
         </div>
       </section>
 
-      <section id="documents" class="tab-panel">
-        <div class="card"><div class="card-head"><div><div class="card-kicker">DOCUMENT INTELLIGENCE</div><h2>Normalized transaction data</h2></div></div><div id="documentDetails" class="document-details"></div></div>
-      </section>
+      <section id="documents" class="tab-panel"><div class="card"><div class="card-head"><div><div class="card-kicker">DOCUMENT INTELLIGENCE</div><h2>Normalized transaction data</h2></div><span class="muted">Extracted fields</span></div><div id="documentDetails" class="document-details"></div></div></section>
 
-      <section id="audit" class="tab-panel">
-        <div class="card"><div class="card-head"><div><div class="card-kicker">TRACEABILITY</div><h2>Audit timeline</h2></div><span class="muted">Every decision recorded</span></div><div id="auditList" class="timeline"></div></div>
-      </section>
+      <section id="audit" class="tab-panel"><div class="card"><div class="card-head"><div><div class="card-kicker">TRACEABILITY</div><h2>Audit timeline</h2></div><span class="muted">Every decision recorded</span></div><div id="auditList" class="timeline"></div></div></section>
     </main>
   </div>
 
-  <div class="modal" id="actionModal" aria-hidden="true"><div class="modal-box"><div class="modal-head"><div><div class="card-kicker">HUMAN APPROVAL GATE</div><h2 id="modalTitle">Review action</h2></div><button class="close" id="closeModal">×</button></div><div class="modal-note">KaryaFlow never executes a business action automatically. Review the evidence-backed draft, then approve or cancel.</div><textarea id="actionMessage" rows="7"></textarea><div class="modal-actions"><button class="ghost" id="cancelAction">Cancel</button><button class="primary" id="approveAction">Approve action</button></div></div></div>
+  <div class="modal" id="evidenceModal" aria-hidden="true"><div class="modal-box evidence-modal"><div class="modal-head"><div><div class="card-kicker">SOURCE EVIDENCE</div><h2 id="evidenceTitle">Verification evidence</h2></div><button class="close" id="closeEvidence">×</button></div><div id="evidenceSummary"></div><div id="evidenceGrid" class="evidence-grid"></div></div></div>
+
+  <div class="modal" id="actionModal" aria-hidden="true"><div class="modal-box"><div class="modal-head"><div><div class="card-kicker">HUMAN APPROVAL GATE</div><h2 id="modalTitle">Review action</h2></div><button class="close" id="closeModal">×</button></div><div class="modal-note">KaryaFlow prepares the action; a human must review and approve it before any business step is considered complete.</div><textarea id="actionMessage" rows="7"></textarea><div class="modal-actions"><button class="ghost" id="cancelAction">Cancel</button><button class="primary" id="approveAction">Approve action</button></div></div></div>
   <div class="toast" id="toast"></div>
   <script src="/static/app.js"></script>
 </body>
