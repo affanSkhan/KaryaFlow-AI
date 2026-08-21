@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#f5f7fa" />
+  <meta name="theme-color" content="#f4f6f8" />
   <meta name="description" content="KaryaFlow procurement verification workspace" />
   <title>KaryaFlow — Procurement Verification</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -21,16 +21,19 @@
           <div class="brand-sub">Procurement Operations</div>
         </div>
       </div>
-      <nav>
-        <button class="nav-item active" data-tab="overview"><span>⌂</span><span class="nav-label">Overview</span></button>
-        <button class="nav-item" data-tab="documents"><span>▤</span><span class="nav-label">Documents</span></button>
-        <button class="nav-item" data-tab="audit"><span>◷</span><span class="nav-label">Audit trail</span></button>
+
+      <nav class="primary-nav">
+        <button class="nav-item active" data-tab="overview"><span class="nav-icon">⌂</span><span class="nav-label">Overview</span></button>
+        <button class="nav-item" data-tab="documents"><span class="nav-icon">▤</span><span class="nav-label">Documents</span></button>
+        <button class="nav-item" data-tab="audit"><span class="nav-icon">◷</span><span class="nav-label">Audit trail</span></button>
       </nav>
+
       <div class="sidebar-case" id="sidebarCase">
         <div class="sidebar-case-label">CURRENT CASE</div>
         <div class="sidebar-case-name" id="sidebarCaseName">No active case</div>
         <div class="sidebar-case-meta" id="sidebarCaseMeta">Create a case to begin</div>
       </div>
+
       <div class="sidebar-bottom">
         <div class="secure-pill"><span class="secure-dot"></span> Secure workspace</div>
         <div class="tiny">Evidence-backed decisions · Human approval required</div>
@@ -50,9 +53,15 @@
         </div>
       </header>
 
-      <section class="hero-strip" aria-live="polite">
-        <div class="hero-status"><span id="statusDot" class="status-dot"></span><span id="caseStatus">No case loaded</span></div>
-        <div class="case-id" id="caseId">Create a case to begin</div>
+      <section class="case-context" aria-live="polite">
+        <div class="case-context-main">
+          <span id="caseStatusPill" class="status-pill neutral"><span id="statusDot" class="status-dot"></span><span id="caseStatus">No case loaded</span></span>
+          <div>
+            <div id="caseContextTitle" class="case-context-title">No active case</div>
+            <div id="caseContextMeta" class="case-context-meta">Create a case or launch the demo to begin.</div>
+          </div>
+        </div>
+        <div class="case-context-id" id="caseId">—</div>
       </section>
 
       <section id="overview" class="tab-panel active">
@@ -60,14 +69,18 @@
           <div class="summary-card"><span>Documents</span><strong id="summaryDocs">0 / 3</strong><small>PO · invoice · challan</small></div>
           <div class="summary-card"><span>Checks passed</span><strong id="summaryChecks">—</strong><small>Verification checks</small></div>
           <div class="summary-card"><span>Match confidence</span><strong id="summaryConfidence">—</strong><small>Reconciliation score</small></div>
-          <div class="summary-card"><span>Next action</span><strong id="summaryAction">Waiting</strong><small>Human decision required</small></div>
+          <div class="summary-card summary-action"><span>Next action</span><strong id="summaryAction">Waiting</strong><small>Human decision required</small></div>
         </div>
 
         <div class="card workflow-card">
           <div class="card-head">
-            <div><div class="card-kicker">VERIFICATION WORKFLOW</div><h2>From source documents to approved action</h2></div>
+            <div>
+              <div class="card-kicker">VERIFICATION WORKFLOW</div>
+              <h2>From source documents to approved action</h2>
+            </div>
             <span class="badge" id="workflowBadge">READY</span>
           </div>
+
           <div class="stepper" id="stepper" aria-label="Verification steps">
             <div class="step active" data-step="1"><span class="step-dot">1</span><span>Documents</span></div>
             <div class="step" data-step="2"><span class="step-dot">2</span><span>Verify</span></div>
@@ -79,20 +92,22 @@
             <input id="fileInput" type="file" accept=".pdf,.txt" multiple hidden />
             <div class="drop-icon">↑</div>
             <div class="drop-title">Upload the PO, invoice and delivery challan</div>
-            <div class="drop-text">PDF or TXT · up to 10 MB per file</div>
+            <div class="drop-text">PDF or TXT · up to 10 MB per file · drag & drop supported</div>
             <button class="secondary" id="browse">Choose documents</button>
           </div>
+
           <div class="doc-row" id="docRow"></div>
+
           <div class="run-row">
             <div>
               <div class="run-hint" id="runHint">Upload all three documents to start verification.</div>
-              <div class="run-meta" id="runMeta">We validate vendor, PO reference, quantity and unit price.</div>
+              <div class="run-meta" id="runMeta">Required: one purchase order, one invoice and one delivery challan.</div>
             </div>
             <button class="primary" id="runAnalysis" disabled>Run verification</button>
           </div>
         </div>
 
-        <div class="grid-top lower-grid">
+        <div class="results-grid">
           <div class="card verdict-card">
             <div class="card-head">
               <div><div class="card-kicker">VERIFICATION RESULT</div><h2 id="verdictLabel">Awaiting analysis</h2></div>
@@ -114,8 +129,11 @@
             </div>
           </div>
 
-          <div class="card checks-card compact-checks">
-            <div class="card-head"><div><div class="card-kicker">VERIFICATION CHECKS</div><h2>Reconciliation checks</h2></div><span id="matchCount" class="muted">0 checks</span></div>
+          <div class="card checks-card">
+            <div class="card-head">
+              <div><div class="card-kicker">VERIFICATION CHECKS</div><h2>Reconciliation checks</h2></div>
+              <span id="matchCount" class="muted">0 checks</span>
+            </div>
             <div id="checks" class="checks"></div>
           </div>
         </div>
@@ -139,16 +157,22 @@
 
   <div class="modal" id="evidenceModal" aria-hidden="true">
     <div class="modal-box evidence-modal">
-      <div class="modal-head"><div><div class="card-kicker">SOURCE EVIDENCE</div><h2 id="evidenceTitle">Verification evidence</h2></div><button class="close" id="closeEvidence" aria-label="Close evidence">×</button></div>
+      <div class="modal-head">
+        <div><div class="card-kicker">SOURCE EVIDENCE</div><h2 id="evidenceTitle">Verification evidence</h2></div>
+        <button class="close" id="closeEvidence" aria-label="Close evidence">×</button>
+      </div>
       <div id="evidenceSummary"></div>
       <div id="evidenceGrid" class="evidence-grid"></div>
     </div>
   </div>
 
   <div class="modal" id="actionModal" aria-hidden="true">
-    <div class="modal-box">
-      <div class="modal-head"><div><div class="card-kicker">HUMAN APPROVAL GATE</div><h2 id="modalTitle">Review action</h2></div><button class="close" id="closeModal" aria-label="Close review">×</button></div>
-      <div class="modal-note">KaryaFlow prepares the action; a human must review and approve it before the business step is considered complete.</div>
+    <div class="modal-box action-modal">
+      <div class="modal-head">
+        <div><div class="card-kicker">HUMAN APPROVAL GATE</div><h2 id="modalTitle">Review action</h2></div>
+        <button class="close" id="closeModal" aria-label="Close review">×</button>
+      </div>
+      <div class="approval-context" id="approvalContext">Review the evidence-backed draft before approving.</div>
       <textarea id="actionMessage" rows="7"></textarea>
       <div class="modal-actions"><button class="ghost" id="cancelAction">Cancel</button><button class="primary" id="approveAction">Approve action</button></div>
     </div>
