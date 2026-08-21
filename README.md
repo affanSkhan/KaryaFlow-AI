@@ -4,7 +4,14 @@
 
 KaryaFlow AI is an evidence-first procurement operations copilot for small and mid-sized businesses. It turns a Purchase Order, Invoice, and Delivery Challan into a verified three-way match, explains exceptions with source evidence, recommends the next action, and records the human decision in an audit trail.
 
+## Live demo
+
+**https://karyaflow-ai.onrender.com**
+
+Use **Launch demo** for the fastest judge walkthrough. A manual case can also be created from **New case**.
+
 ## Round 2 scope
+
 - Multi-document procurement workflow
 - PO / Invoice / Delivery Challan extraction
 - Deterministic three-way reconciliation
@@ -16,6 +23,15 @@ KaryaFlow AI is an evidence-first procurement operations copilot for small and m
 - Grounded Gemini vendor-draft endpoint with deterministic fallback
 - Demo-ready transaction data
 - Docker + Render deployment configuration
+
+## Submission resources
+
+- [90-second demo script](docs/DEMO.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Security notes](docs/SECURITY.md)
+- [Round 2 submission checklist](docs/SUBMISSION.md)
+- [Demo video script](docs/DEMO_VIDEO.md)
+- [Source code](https://github.com/affanSkhan/KaryaFlow-AI)
 
 ## Run locally
 
@@ -32,6 +48,7 @@ Open http://localhost:8000.
 For the optional grounded Gemini draft endpoint, set `GEMINI_API_KEY`. Without it, the main procurement workflow remains fully functional.
 
 ## API
+
 - `GET /api/health`
 - `GET /api/ai/status`
 - `POST /api/ai/draft`
@@ -62,6 +79,7 @@ FastAPI
 Critical financial comparisons are calculated in deterministic Python. Gemini is isolated to drafting/explanation work and receives verified facts rather than authority to change reconciliation results.
 
 ## Demo flow
+
 1. Click **Launch demo**.
 2. KaryaFlow generates a realistic PO, invoice, and delivery-challan transaction in-browser.
 3. Verify the vendor, PO reference, quantity, and price checks.
@@ -73,7 +91,8 @@ Critical financial comparisons are calculated in deterministic Python. Gemini is
 
 ## Deployment
 
-A `render.yaml` blueprint is included for a single-service deployment. The Dockerfile and `docker-compose.yml` support local/container deployment.
+The production demo runs on Render using the free web-service tier. A `render.yaml` blueprint is included for a single-service deployment. The Dockerfile and `docker-compose.yml` support local/container deployment.
 
 ## License
+
 MIT
