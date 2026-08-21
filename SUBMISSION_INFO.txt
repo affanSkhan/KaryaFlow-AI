@@ -1,0 +1,33 @@
+KARYAFLOW AI — PRASUNETHON 2.0 ROUND 2 SUBMISSION
+
+Project Title
+KaryaFlow AI — Evidence-First Procurement Verification
+
+Live Demo
+https://karyaflow-ai.onrender.com
+
+GitHub Repository
+https://github.com/affanSkhan/KaryaFlow-AI
+
+Demo Video
+https://youtu.be/1xa1tVc1hOU
+
+Submission Contents
+- Source code: app/, static/, tests/
+- Sample demo data: sample-data/
+- Technical documentation: docs/
+- Deployment configuration: render.yaml, Dockerfile, docker-compose.yml
+- Presentation: add the final Round 2 PPTX to the submission ZIP under presentation/
+- Demo video: add the MP4 to the submission ZIP under demo-video/ if the final ZIP remains within the Unstop upload limit; the YouTube link above is the primary video reference.
+
+Quick Start
+1. Create a Python virtual environment.
+2. Install dependencies from requirements.txt.
+3. Run: uvicorn app.main:app --reload --port 8000
+4. Open http://localhost:8000
+
+Recommended Judge Demo
+Launch demo → verify vendor / PO reference / quantity / price → inspect quantity exception (PO 100, Invoice 120, Delivery 100) → open Evidence → review Ask Vendor → Approve action → open Audit trail.
+
+Important
+Do not include .env, virtual environments, caches, or Git history in the final Unstop ZIP. Keep the ZIP focused on source code, documentation, deployment configuration, and the submission assets.
