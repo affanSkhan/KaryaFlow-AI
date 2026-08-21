@@ -3,6 +3,7 @@ let caseName=localStorage.getItem('karyaflow_case_name')||null;
 let currentRecommendation=null;
 let currentActionId=null;
 let currentDocuments=[];
+let lastAnalysis=null;
 const $=id=>document.getElementById(id);
 
 function esc(v){return String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
@@ -38,7 +39,7 @@ function updateSummary(){
 }
 
 function resetView(){
-  currentDocuments=[];currentRecommendation=null;currentActionId=null;
+  currentDocuments=[];currentRecommendation=null;currentActionId=null;lastAnalysis=null;
   $('docRow').innerHTML='';
   $('checks').innerHTML='<div class="empty-state">Upload the three transaction documents and run verification.</div>';
   $('documentDetails').innerHTML='<div class="empty-state">No documents loaded.</div>';
@@ -56,10 +57,43 @@ function resetView(){
   updateSummary();
 }
 
-async function newCase(){
-  const name=prompt('Case name','Q3 procurement verification');if(!name)return;
-  try{const d=await api('/api/cases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});caseId=d.id;caseName=name;saveCase();resetView();toast('New case created')}catch(e){toast(e.message)}
+function ensureNewCaseModal(){
+  if($('newCaseModal'))return;
+  const style=document.createElement('style');
+  style.textContent=`
+    .new-case-modal{width:min(520px,100%);padding:24px}
+    .modal-subtitle{margin:7px 0 0;color:#667588;font-size:11px;line-height:1.5}
+    .new-case-form{margin-top:18px}
+    .new-case-form label{display:block;font-size:11px;font-weight:750;color:#334155;margin-bottom:7px}
+    .new-case-form input{display:block;width:100%;height:44px;padding:0 12px;border:1px solid #cfd8e3;border-radius:9px;background:#fbfcfe;color:#17212b;font-size:13px;outline:none;transition:border-color .15s,box-shadow .15s,background .15s}
+    .new-case-form input:focus{border-color:#6b98e8;background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+    .field-hint{font-size:10px;color:#8995a2;margin-top:7px;line-height:1.45}
+  `;
+  document.head.appendChild(style);
+  const wrap=document.createElement('div');
+  wrap.innerHTML=`<div class="modal" id="newCaseModal" aria-hidden="true"><div class="modal-box new-case-modal" role="dialog" aria-modal="true" aria-labelledby="newCaseTitle"><div class="modal-head"><div><div class="card-kicker">NEW CASE</div><h2 id="newCaseTitle">Create procurement case</h2><p class="modal-subtitle">Give this verification a clear name so your team can identify it later.</p></div><button class="close" id="closeNewCase" aria-label="Close new case">×</button></div><form id="newCaseForm" class="new-case-form"><label for="newCaseName">Case name</label><input id="newCaseName" name="name" type="text" maxlength="80" autocomplete="off" value="Q3 procurement verification" placeholder="e.g. Q3 supplier verification — ABC Manufacturing" required /><div class="field-hint">Use a short, recognizable name such as a supplier, PO number or reporting period.</div><div class="modal-actions"><button type="button" class="ghost" id="cancelNewCase">Cancel</button><button type="submit" class="primary">Create case</button></div></form></div></div>`;
+  document.body.appendChild(wrap.firstElementChild);
+  $('newCaseForm').addEventListener('submit',e=>{e.preventDefault();submitNewCase()});
+  $('cancelNewCase').onclick=()=>closeModal('newCaseModal');
+  $('closeNewCase').onclick=()=>closeModal('newCaseModal');
 }
+
+function submitNewCase(){
+  const input=$('newCaseName');
+  const name=(input.value||'').trim();
+  if(!name){input.focus();return}
+  closeModal('newCaseModal');
+  createCase(name);
+}
+
+async function createCase(name){
+  try{
+    const d=await api('/api/cases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    caseId=d.id;caseName=name;saveCase();resetView();setContext(caseName,'Ready for documents');setSidebarContext(caseName,'Ready for documents');toast('New case created');
+  }catch(e){toast(e.message)}
+}
+
+async function newCase(){ensureNewCaseModal();openModal('newCaseModal');const input=$('newCaseName');input.value='Q3 procurement verification';setTimeout(()=>{input.focus();input.select()},50)}
 
 function renderDocs(docs){
   currentDocuments=docs||[];
@@ -78,8 +112,7 @@ async function upload(files){
     setStatus('Uploading documents…','running');setStep(1);
     const fd=new FormData();allowed.forEach(f=>fd.append('files',f));
     const data=await api(`/api/cases/${caseId}/documents`,{method:'POST',body:fd});
-    renderDocs(data.documents);setWorkflow('READY');
-    setStatus(currentDocuments.length>=3?'Documents ready':'More documents required');
+    renderDocs(data.documents);setWorkflow('READY');setStatus(currentDocuments.length>=3?'Documents ready':'More documents required');
     await loadCase();toast(`${data.documents.length} document(s) added`);
   }catch(e){setStatus('Upload failed','danger');toast(e.message)}
 }
@@ -91,7 +124,7 @@ async function analyze(){
   try{
     setStatus('Verifying documents…','running');setWorkflow('VERIFYING');setStep(2);setVerifyState(false,'Verifying…');
     const d=await api(`/api/cases/${caseId}/analyze`,{method:'POST'});
-    localStorage.setItem(`karyaflow_analysis_${caseId}`,JSON.stringify(d));
+    lastAnalysis=d;localStorage.setItem(`karyaflow_analysis_${caseId}`,JSON.stringify(d));
     renderAnalysis(d);await loadCase();setStep(d.recommendation?3:2);setVerifyState(false,'Verification complete');toast('Verification complete');
   }catch(e){setWorkflow('READY');setStatus('Verification failed','danger');setVerifyState(true,'Run verification');toast(e.message)}
 }
@@ -106,6 +139,7 @@ function renderException(r){
 }
 
 function renderAnalysis(d){
+  lastAnalysis=d;localStorage.setItem(`karyaflow_analysis_${caseId}`,JSON.stringify(d));
   const r=d.reconciliation||{};const checks=r.checks||[];const good=r.status==='MATCH';const passed=checks.filter(c=>c.status==='MATCH').length;
   $('verdictIcon').className=`verdict-icon ${good?'good':'warn'}`;$('verdictIcon').textContent=good?'✓':'!';
   $('verdictLabel').textContent=good?'Transaction verified':'Exception detected';$('verdictSummary').textContent=r.summary||'';
@@ -116,79 +150,80 @@ function renderAnalysis(d){
   $('takeAction').disabled=!currentRecommendation||good;$('takeAction').textContent=good?'No action needed':'Review action';
   if(good){setWorkflow('VERIFIED','success');setStatus('Transaction verified','success');setStep(2);$('exceptionDetail').className='exception-detail hidden';$('exceptionDetail').innerHTML=''}
   else{setWorkflow('REVIEW REQUIRED','review');setStatus('Exception requires review','review');setStep(3);renderException(r)}
-  $('checks').innerHTML=checks.length?checks.map(c=>{
-    const bad=c.status==='MISMATCH';
-    const values=c.key==='quantity'?`PO <b>${esc(c.expected)}</b> · Invoice <b>${esc(c.actual.invoice)}</b> · Delivery <b>${esc(c.actual.delivery)}</b>`:`Expected <b>${esc(fmt(c.expected))}</b> · Actual <b>${esc(fmt(c.actual))}</b>`;
-    return `<div class="check"><div class="check-label">${esc(c.label)}</div><div class="check-values">${values}</div><div class="check-status ${bad?'bad':'good'}">${esc(c.status)}</div><button class="evidence-btn" data-evidence='${esc(JSON.stringify(c.evidence||[]))}'>Evidence</button></div>`;
-  }).join(''):'<div class="empty-state">No checks returned.</div>';
+  $('checks').innerHTML=checks.length?checks.map(c=>{const bad=c.status==='MISMATCH';const values=c.key==='quantity'?`PO <b>${esc(c.expected)}</b> · Invoice <b>${esc(c.actual.invoice)}</b> · Delivery <b>${esc(c.actual.delivery)}</b>`:`Expected <b>${esc(fmt(c.expected))}</b> · Actual <b>${esc(fmt(c.actual))}</b>`;return `<div class="check"><div class="check-label">${esc(c.label)}</div><div class="check-values">${values}</div><div class="check-status ${bad?'bad':'good'}">${esc(c.status)}</div><button class="evidence-btn" data-evidence='${esc(JSON.stringify(c.evidence||[]))}'>Evidence</button></div>`}).join(''):'<div class="empty-state">No checks returned.</div>';
   document.querySelectorAll('.evidence-btn').forEach(btn=>btn.addEventListener('click',()=>showEvidence(JSON.parse(btn.dataset.evidence))));
   updateSummary();
 }
 
 function evidenceRole(documentName,index){const name=String(documentName||'').toLowerCase();if(name.includes('invoice'))return 'Invoiced';if(name.includes('delivery')||name.includes('challan'))return 'Delivered';if(name.includes('purchase')||name.includes('order'))return 'Approved';return index===0?'Reference':'Source'}
 function showEvidence(evidence){
-  const items=evidence||[];const first=items[0]||{};const field=first.field||'Field';const baseline=Number(first.value);const numeric=Number.isFinite(baseline)&&items.every(x=>Number.isFinite(Number(x.value)));
-  const invoiceItem=items.find(e=>String(e.document||'').toLowerCase().includes('invoice'));const delta=invoiceItem&&numeric?Number(invoiceItem.value)-baseline:null;
-  const fieldTitle=field.charAt(0).toUpperCase()+field.slice(1);
+  const items=evidence||[];const first=items[0]||{};const field=first.field||'Field';const baseline=Number(first.value);const numeric=Number.isFinite(baseline)&&items.every(x=>Number.isFinite(Number(x.value)));const invoiceItem=items.find(e=>String(e.document||'').toLowerCase().includes('invoice'));const delta=invoiceItem&&numeric?Number(invoiceItem.value)-baseline:null;const fieldTitle=field.charAt(0).toUpperCase()+field.slice(1);
   $('evidenceTitle').textContent=`${fieldTitle} evidence`;
   $('evidenceSummary').innerHTML=`<div class="evidence-summary"><strong>${esc(fieldTitle)}</strong><span>Source-backed comparison across ${items.length} document${items.length===1?'':'s'}</span>${delta!==null&&delta!==0?`<span class="variance-line">Invoice is +${esc(Math.abs(delta))} units above the approved PO</span>`:''}</div>`;
-  $('evidenceGrid').innerHTML=items.map((e,i)=>{
-    const valueNum=Number(e.value);const invoice=String(e.document||'').toLowerCase().includes('invoice');const mismatch=numeric&&invoice&&valueNum!==baseline;const role=evidenceRole(e.document,i);const deltaText=mismatch?`Variance: +${Math.abs(valueNum-baseline)} units`:'';
-    return `<div class="evidence-card ${mismatch?'mismatch':''}"><div class="source">${esc(e.document||'Unknown source')} · page ${esc(e.page||1)}</div><div class="value-row"><div class="value">${esc(e.value)}</div><span class="source-badge">${esc(role)}</span></div><div class="snippet">${esc(e.snippet||'No source snippet available.')}</div>${deltaText?`<div class="delta">${esc(deltaText)}</div>`:''}<div class="confidence">Extraction confidence · ${Math.round((e.confidence||0)*100)}%</div></div>`;
-  }).join('');openModal('evidenceModal');
+  $('evidenceGrid').innerHTML=items.map((e,i)=>{const valueNum=Number(e.value);const invoice=String(e.document||'').toLowerCase().includes('invoice');const mismatch=numeric&&invoice&&valueNum!==baseline;const role=evidenceRole(e.document,i);const deltaText=mismatch&&Number.isFinite(valueNum-baseline)?`Variance: +${Math.abs(valueNum-baseline)} units`:'';return `<div class="evidence-card ${mismatch?'mismatch':''}"><div class="source">${esc(e.document||'Unknown source')} · page ${esc(e.page||1)}</div><div class="value-row"><div class="value">${esc(e.value)}</div><span class="source-badge">${esc(role)}</span></div><div class="snippet">${esc(e.snippet||'No source snippet available.')}</div>${deltaText?`<div class="delta">${esc(deltaText)}</div>`:''}<div class="confidence">Extraction confidence · ${Math.round((e.confidence||0)*100)}%</div></div>`}).join('');
+  openModal('evidenceModal');
 }
 
-function openModal(id){const m=$(id);m.classList.add('open');m.setAttribute('aria-hidden','false')}
-function closeModal(id){const m=$(id);m.classList.remove('open');m.setAttribute('aria-hidden','true')}
+function openModal(id){const m=$(id);if(!m)return;m.classList.add('open');m.setAttribute('aria-hidden','false')}
+function closeModal(id){const m=$(id);if(!m)return;m.classList.remove('open');m.setAttribute('aria-hidden','true')}
+
 async function openAction(){if(!currentRecommendation){toast('Run verification first');return}$('modalTitle').textContent=currentRecommendation.action.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());$('approvalContext').textContent=`Recommended action: ${currentRecommendation.action.replace(/_/g,' ')}. Review the evidence-backed message before approving.`;$('actionMessage').value=currentRecommendation.message||'';$('approveAction').disabled=false;openModal('actionModal')}
+
 async function approve(){
   if(!currentRecommendation)return;
-  try{$('approveAction').disabled=true;const create=await api(`/api/cases/${caseId}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action_type:currentRecommendation.action,message:$('actionMessage').value})});currentActionId=create.id;await api(`/api/cases/${caseId}/actions/${currentActionId}/approve`,{method:'POST'});closeModal('actionModal');localStorage.removeItem(`karyaflow_analysis_${caseId}`);await loadCase();setStatus('Action approved','success');setWorkflow('APPROVED','success');$('summaryAction').textContent='Approved';$('recTitle').textContent='Action approved';$('recText').textContent='Human approval recorded. No further action is pending.';$('takeAction').disabled=true;setStep(4);setVerifyState(false,'Verification complete');toast('Human approval recorded')}
-  catch(e){$('approveAction').disabled=false;toast(e.message)}
+  try{
+    $('approveAction').disabled=true;
+    const create=await api(`/api/cases/${caseId}/actions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action_type:currentRecommendation.action,message:$('actionMessage').value})});
+    currentActionId=create.id;await api(`/api/cases/${caseId}/actions/${currentActionId}/approve`,{method:'POST'});
+    closeModal('actionModal');localStorage.removeItem(`karyaflow_analysis_${caseId}`);lastAnalysis=null;await loadCase();setStatus('Action approved','success');setWorkflow('APPROVED','success');$('summaryAction').textContent='Approved';$('recTitle').textContent='Action approved';$('recText').textContent='Human approval recorded. No further action is pending.';$('takeAction').disabled=true;setStep(4);setVerifyState(false,'Verification complete');toast('Human approval recorded');
+  }catch(e){$('approveAction').disabled=false;toast(e.message)}
 }
 
-function renderAudit(items){
-  $('auditList').innerHTML=items.length?items.map(x=>{const p=auditPresentation(x.event,x.detail);return `<div class="event ${p.cls}"><time>${new Date(x.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</time><div class="event-icon">${p.icon}</div><div><strong>${esc(String(x.event||'').replaceAll('_',' '))}</strong><p>${esc(x.detail||'')}</p></div></div>`}).join(''):'<div class="empty-state">No audit events yet.</div>';
-}
 function auditPresentation(event,detail){const key=String(event||'').toLowerCase();if(key==='human_approved_action'||key.includes('approved'))return{icon:'✓',cls:'success'};if(key==='action_created'||key.includes('action'))return{icon:'→',cls:'review'};if(key==='analysis_completed'||key.includes('analysis'))return{icon:detail?.toLowerCase().includes('exception')?'!':'✓',cls:detail?.toLowerCase().includes('exception')?'review':'success'};if(key.includes('uploaded'))return{icon:'↑',cls:'neutral'};return{icon:'•',cls:'neutral'}}
+function renderAudit(items){$('auditList').innerHTML=items.length?items.map(x=>{const p=auditPresentation(x.event,x.detail);return `<div class="event ${p.cls}"><time>${new Date(x.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</time><div class="event-icon">${p.icon}</div><div><strong>${esc(String(x.event||'').replaceAll('_',' '))}</strong><p>${esc(x.detail||'')}</p></div></div>`}).join(''):'<div class="empty-state">No audit events yet.</div>'}
 
 async function loadCase(){
   if(!caseId)return;
   try{
     const d=await api(`/api/cases/${caseId}`);caseName=d.case?.name||caseName;saveCase();
-    const docs=(d.documents||[]).map(x=>({filename:x.filename,label:x.extracted?.document_label,document_type:x.document_type}));renderDocs(docs);
+    const docs=(d.documents||[]).map(x=>({filename:x.filename,label:x.extracted.document_label,document_type:x.document_type}));renderDocs(docs);
     const firstVendor=d.documents?.find(x=>x.extracted?.vendor)?.extracted?.vendor||'';const firstPo=d.documents?.find(x=>x.extracted?.po_number)?.extracted?.po_number||'';
-    setSidebarContext(caseName||'Current case',firstPo&&firstVendor?`${firstPo} · ${firstVendor}`:caseName||'Current case');setContext(caseName||'Current case',firstPo&&firstVendor?`${firstPo} · ${firstVendor}`:'Procurement verification');$('caseId').textContent=caseId;
-    $('documentDetails').innerHTML=d.documents?.length?d.documents.map(x=>{const e=x.extracted||{};return `<div class="doc-section"><div class="doc-title">${esc(e.document_label||x.document_type||'Document')} · ${esc(e.filename||x.filename)}</div><div class="field-grid"><div class="field"><div class="k">Vendor</div><div class="v">${esc(fmt(e.vendor))}</div></div><div class="field"><div class="k">PO reference</div><div class="v">${esc(fmt(e.po_number))}</div></div><div class="field"><div class="k">Quantity</div><div class="v">${esc(fmt(e.quantity))}</div></div><div class="field"><div class="k">Unit price</div><div class="v">₹${esc(fmt(e.unit_price))}</div></div><div class="field"><div class="k">Total</div><div class="v">₹${esc(fmt(e.total))}</div></div><div class="field"><div class="k">Date</div><div class="v">${esc(fmt(e.date))}</div></div></div></div>`}).join(''):'<div class="empty-state">No documents loaded.</div>';
+    setContext(caseName||'Current case',firstPo&&firstVendor?`${firstPo} · ${firstVendor}`:caseName||'Current case');setSidebarContext(caseName||'Current case',firstPo&&firstVendor?`${firstPo} · ${firstVendor}`:caseName||'Current case');
+    $('documentDetails').innerHTML=d.documents?.length?d.documents.map(x=>{const e=x.extracted;return `<div class="doc-section"><div class="doc-title">${esc(e.document_label)} · ${esc(e.filename)}</div><div class="field-grid"><div class="field"><div class="k">Vendor</div><div class="v">${esc(fmt(e.vendor))}</div></div><div class="field"><div class="k">PO reference</div><div class="v">${esc(fmt(e.po_number))}</div></div><div class="field"><div class="k">Quantity</div><div class="v">${esc(fmt(e.quantity))}</div></div><div class="field"><div class="k">Unit price</div><div class="v">₹${esc(fmt(e.unit_price))}</div></div><div class="field"><div class="k">Total</div><div class="v">₹${esc(fmt(e.total))}</div></div><div class="field"><div class="k">Date</div><div class="v">${esc(fmt(e.date))}</div></div></div></div>`}).join(''):'<div class="empty-state">No documents loaded.</div>';
     renderAudit(d.audit||[]);
     const approved=d.actions?.some(a=>a.status==='approved');
     if(approved){setStatus('Action approved','success');setWorkflow('APPROVED','success');$('summaryAction').textContent='Approved';$('takeAction').disabled=true;setStep(4)}
-    else if(d.case?.status==='exception'){setStatus('Exception requires review','review');setWorkflow('REVIEW REQUIRED','review');$('summaryAction').textContent=currentRecommendation?.action?currentRecommendation.action.replace(/_/g,' '):'Review';setStep(3)}
-    else if(d.case?.status==='verified'){setStatus('Transaction verified','success');setWorkflow('VERIFIED','success');$('summaryAction').textContent='No action';setStep(2)}
+    else if(d.case?.status==='exception'){
+      setStatus('Exception requires review','review');setWorkflow('REVIEW REQUIRED','review');$('summaryAction').textContent=currentRecommendation?.action?currentRecommendation.action.replace(/_/g,' '):'Review';setStep(3);
+      const saved=localStorage.getItem(`karyaflow_analysis_${caseId}`);if(saved&&!lastAnalysis){try{renderAnalysis(JSON.parse(saved))}catch{}}
+    }else if(d.case?.status==='verified'){setStatus('Transaction verified','success');setWorkflow('VERIFIED','success');$('summaryAction').textContent='No action';setStep(2)}
     else if(currentDocuments.length===3){setStatus('Documents ready');setWorkflow('READY');setStep(1)}
   }catch(e){toast(e.message)}
 }
 
-function tabSetup(){document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');$(btn.dataset.tab).classList.add('active');window.scrollTo({top:0,behavior:'smooth'});if(caseId)loadCase()}))}
+function tabSetup(){document.querySelectorAll('.nav-item').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));btn.classList.add('active');$(btn.dataset.tab).classList.add('active');window.scrollTo({top:0,behavior:'smooth'})}))}
 
 async function launchDemo(){
-  resetView();
+  resetView();clearSavedCase();
   try{
     const d=await api('/api/cases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Demo · ABC Manufacturing · PO-1042'})});
-    caseId=d.id;caseName=d.name||'Demo · ABC Manufacturing · PO-1042';saveCase();setContext(caseName,'PO-1042 · ABC Manufacturing');setSidebarContext(caseName,'PO-1042 · ABC Manufacturing');$('caseId').textContent=caseId;
+    caseId=d.id;caseName=d.name||'Demo · ABC Manufacturing · PO-1042';saveCase();setContext(caseName,'PO-1042 · ABC Manufacturing');setSidebarContext(caseName,'PO-1042 · ABC Manufacturing');
     const demo=[['purchase_order.txt','Purchase Order\nPO Number: PO-1042\nVendor: ABC Manufacturing\nDate: 2026-08-20\nItem: Steel Bolt M10\nQuantity: 100\nUnit Price: 45\nTotal: 4500'],['invoice.txt','Tax Invoice\nInvoice Number: INV-8831\nReference PO: PO-1042\nVendor: ABC Manufacturing\nDate: 2026-08-21\nItem: Steel Bolt M10\nQuantity: 120\nUnit Price: 45\nTotal: 5400'],['delivery_challan.txt','Delivery Challan\nChallan No: DC-3304\nVendor: ABC Manufacturing\nReference PO: PO-1042\nDelivery Date: 2026-08-21\nItem: Steel Bolt M10\nQuantity: 100\nUnit Price: 45\nTotal: 4500']];
     const files=demo.map(([n,t])=>new File([t],n,{type:'text/plain'}));await upload(files);await analyze();
   }catch(e){setStatus('Demo failed','danger');toast(e.message)}
 }
 
+function modalGlobalSetup(){
+  document.addEventListener('click',e=>{if(e.target.classList.contains('modal'))closeModal(e.target.id)});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('newCaseModal');closeModal('actionModal');closeModal('evidenceModal')}});
+}
+
 $('browse').onclick=()=>$('fileInput').click();
-$('fileInput').onchange=e=>upload([...e.target.files]);
+$('fileInput').onchange=e=>{upload([...e.target.files]);e.target.value=''};
 $('dropzone').ondragover=e=>{e.preventDefault();$('dropzone').classList.add('dragging')};
 $('dropzone').ondragleave=()=>$('dropzone').classList.remove('dragging');
 $('dropzone').ondrop=e=>{e.preventDefault();$('dropzone').classList.remove('dragging');upload([...e.dataTransfer.files])};
-$('newCase').onclick=newCase;$('demoCase').onclick=launchDemo;$('runAnalysis').onclick=analyze;$('takeAction').onclick=openAction;$('approveAction').onclick=approve;
-$('closeModal').onclick=()=>closeModal('actionModal');$('cancelAction').onclick=()=>closeModal('actionModal');$('closeEvidence').onclick=()=>closeModal('evidenceModal');
-document.addEventListener('click',e=>{if(e.target.classList.contains('modal'))closeModal(e.target.id)});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('actionModal');closeModal('evidenceModal')}});
-tabSetup();resetView();
-if(caseId){loadCase().catch(()=>{clearSavedCase();caseId=null;caseName=null;resetView()})}
+$('newCase').onclick=newCase;$('demoCase').onclick=launchDemo;$('runAnalysis').onclick=analyze;$('takeAction').onclick=openAction;$('approveAction').onclick=approve;$('closeModal').onclick=()=>closeModal('actionModal');$('cancelAction').onclick=()=>closeModal('actionModal');$('closeEvidence').onclick=()=>closeModal('evidenceModal');
+tabSetup();modalGlobalSetup();resetView();
+
+if(caseId){loadCase().catch(()=>{});}
